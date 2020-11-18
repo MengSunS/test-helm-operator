@@ -1,457 +1,232 @@
-# Managing Helm releases the GitOps way
+# Kibana Helm Chart
 
-**What is GitOps?**
+This Helm chart is a lightweight way to configure and run our official
+[Kibana Docker image][].
 
-GitOps is a way to do Continuous Delivery, it works by using Git as a source of truth for declarative infrastructure and workloads.
-For Kubernetes this means using `git push` instead of `kubectl create/apply` or `helm install/upgrade`.
 
-In a traditional CICD pipeline, CD is an implementation extension powered by the
-continuous integration tooling to promote build artifacts to production.
-In the GitOps pipeline model, any change to production must be committed in source control
-(preferable via a pull request) prior to being applied on the cluster.
-This way rollback and audit logs are provided by Git.
-If the entire production state is under version control and described in a single Git repository, when disaster strikes,
-the whole infrastructure can be quickly restored from that repository.
 
-To better understand the benefits of this approach to CD and what the differences between GitOps and
-Infrastructure-as-Code tools are, head to the Weaveworks website and read [GitOps - What you need to know](https://www.weave.works/technologies/gitops/) article.
+<!-- START doctoc generated TOC please keep comment here to allow auto update -->
+<!-- DON'T EDIT THIS SECTION, INSTEAD RE-RUN doctoc TO UPDATE -->
 
-In order to apply the GitOps pipeline model to Kubernetes you need three things:
 
-* a Git repository with your workloads definitions in YAML format, Helm charts and any other Kubernetes custom resource that defines your cluster desired state (I will refer to this as the *config* repository)
-* a container registry where your CI system pushes immutable images (no *latest* tags, use *semantic versioning* or git *commit sha*)
-* an operator that runs in your cluster and does a two-way synchronization:
-    * watches the registry for new image releases and based on deployment policies updates the workload definitions with the new image tag and commits the changes to the config repository
-    * watches for changes in the config repository and applies them to your cluster
+- [Requirements](#requirements)
+- [Installing](#installing)
+  - [Install released version using Helm repository](#install-released-version-using-helm-repository)
+- [Upgrading](#upgrading)
+- [Usage notes](#usage-notes)
+- [Configuration](#configuration)
+  - [Deprecated](#deprecated)
+- [FAQ](#faq)
+  - [How to deploy this chart on a specific K8S distribution?](#how-to-deploy-this-chart-on-a-specific-k8s-distribution)
+  - [How to use Kibana with security (authentication and TLS) enabled?](#how-to-use-kibana-with-security-authentication-and-tls-enabled)
+  - [How to install OSS version of Kibana?](#how-to-install-oss-version-of-kibana)
+  - [How to install plugins?](#how-to-install-plugins)
+  - [How to import objects post-deployment?](#how-to-import-objects-post-deployment)
+- [Contributing](#contributing)
 
-I will be using GitHub to host the config repo, Docker Hub as the container registry and Flux as the GitOps Kubernetes Operator.
+<!-- END doctoc generated TOC please keep comment here to allow auto update -->
+<!-- Use this to update TOC: -->
+<!-- docker run --rm -it -v $(pwd):/usr/src jorgeandrada/doctoc --github -->
 
-![gitops](https://github.com/fluxcd/helm-operator-get-started/blob/master/diagrams/flux-helm-operator-registry.png)
 
-### Prerequisites
+## Requirements
 
-You'll need a Kubernetes cluster v1.11 or newer, a GitHub account, git and kubectl installed locally.
+* [Helm][] >=2.8.0 and <3.0.0
+* Kubernetes >=1.9
 
-Install Helm v3 and fluxctl for macOS with Homebrew:
+See [supported configurations][] for more details.
 
-```sh
-brew install helm fluxctl
-```
+## Installing
 
-On Windows you can use Chocolatey:
+This chart is tested with the latest 7.9.2 version.
 
-```sh
-choco install kubernetes-helm fluxctl
-```
+### Install released version using Helm repository
 
-On Linux you can download the [helm](https://github.com/helm/helm/releases)
-and [fluxctl](https://github.com/fluxcd/flux/releases) binaries from GitHub.
+* Add the Elastic Helm charts repo:
+`helm repo add elastic https://helm.elastic.co`
 
-### Install Flux
+* Install it:
+  - with Helm 2: `helm install --name kibana --version 7.9.2 elastic/kibana`
+  - with [Helm 3 (beta)][]: `helm install kibana --version 7.9.2 elastic/kibana`
 
-The first step in automating Helm releases with [Flux](https://github.com/fluxcd/flux) is to create a Git repository with your charts source code.
 
-On GitHub, fork this repository and clone it locally
-(replace `fluxcd` with your GitHub username): 
+## Upgrading
 
-```sh
-git clone https://github.com/fluxcd/helm-operator-get-started
-cd helm-operator-get-started
-```
+Please always check [CHANGELOG.md][] and [BREAKING_CHANGES.md][] before
+upgrading to a new chart version.
 
-*If you fork, update the release definitions with your Docker Hub repository and GitHub username located in
-\releases\(dev/stg/prod)\podinfo.yaml in your master branch before proceeding.
 
-Add FluxCD repository to Helm repos:
+## Usage notes
 
-```bash
-helm repo add fluxcd https://charts.fluxcd.io
-```
+* Automated testing of this chart is currently only run against GKE (Google
+Kubernetes Engine).
 
-Create the `fluxcd` namespace:
+* This repo includes a number of [examples][] configurations which can be used
+as a reference. They are also used in the automated testing of this chart.
 
-```sh
-kubectl create ns fluxcd
-```
 
-Install Flux by specifying your fork URL (replace `fluxcd` with your GitHub username): 
+## Configuration
 
-```bash
-helm upgrade -i flux fluxcd/flux --wait \
---namespace fluxcd \
---set git.url=git@github.com:fluxcd/helm-operator-get-started
-```
+| Parameter             | Description                                                                                                                                                                                    | Default                            |
+|-----------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|------------------------------------|
+| `affinity`            | Configurable [affinity][]                                                                                                                                                                      | `{}`                               |
+| `elasticsearchHosts`  | The URLs used to connect to Elasticsearch                                                                                                                                                      | `http://elasticsearch-master:9200` |
+| `envFrom`             | Templatable string to be passed to the [environment from variables][] which will be appended to the `envFrom:` definition for the container                                                    | `[]`                               |
+| `extraContainers`     | Templatable string of additional containers to be passed to the `tpl` function                                                                                                                 | `""`                               |
+| `extraEnvs`           | Extra [environment variables][] which will be appended to the `env:` definition for the container                                                                                              | see [values.yaml][]                |
+| `extraInitContainers` | Templatable string of additional containers to be passed to the `tpl` function                                                                                                                 | `""`                               |
+| `fullnameOverride`    | Overrides the full name of the resources. If not set the name will default to " `.Release.Name` - `.Values.nameOverride orChart.Name` "                                                        | `""`                               |
+| `healthCheckPath`     | The path used for the readinessProbe to check that Kibana is ready. If you are setting `server.basePath` you will also need to update this to `/${basePath}/app/kibana`                        | `/app/kibana`                      |
+| `httpPort`            | The http port that Kubernetes will use for the healthchecks and the service                                                                                                                    | `5601`                             |
+| `imagePullPolicy`     | The Kubernetes [imagePullPolicy][]value                                                                                                                                                        | `IfNotPresent`                     |
+| `imagePullSecrets`    | Configuration for [imagePullSecrets][] so that you can use a private registry for your image                                                                                                   | `[]`                               |
+| `imageTag`            | The Kibana Docker image tag                                                                                                                                                                    | `7.9.2`                   |
+| `image`               | The Kibana Docker image                                                                                                                                                                        | `docker.elastic.co/kibana/kibana`  |
+| `ingress`             | Configurable [ingress][] to expose the Kibana service.                                                                                                                                         | see [values.yaml][]                |
+| `kibanaConfig`        | Allows you to add any config files in `/usr/share/kibana/config/` such as `kibana.yml` See [values.yaml][] for an example of the formatting                                                    | `{}`                               |
+| `labels`              | Configurable [labels][] applied to all Kibana pods                                                                                                                                             | `{}`                               |
+| `lifecycle`           | Allows you to add [lifecycle hooks][]. See [values.yaml][] for an example of the formatting                                                                                                    | `{}`                               |
+| `nameOverride`        | Overrides the chart name for resources. If not set the name will default to `.Chart.Name`                                                                                                      | `""`                               |
+| `nodeSelector`        | Configurable [nodeSelector][] so that you can target specific nodes for your Kibana instances                                                                                                  | `{}`                               |
+| `podAnnotations`      | Configurable [annotations][] applied to all Kibana pods                                                                                                                                        | `{}`                               |
+| `podSecurityContext`  | Allows you to set the [securityContext][] for the pod                                                                                                                                          | see [values.yaml][]                |
+| `priorityClassName`   | The name of the [PriorityClass][]. No default is supplied as the PriorityClass must be created first                                                                                           | `""`                               |
+| `protocol`            | The protocol that will be used for the readinessProbe. Change this to `https` if you have `server.ssl.enabled: true` set                                                                       | `http`                             |
+| `readinessProbe`      | Configuration for the readiness [probe][]                                                                                                                                                      | see [values.yaml][]                |
+| `replicas`            | Kubernetes replica count for the Deployment (i.e. how many pods)                                                                                                                               | `1`                                |
+| `resources`           | Allows you to set the [resources][] for the Deployment                                                                                                                                         | see [values.yaml][]                |
+| `secretMounts`        | Allows you easily mount a secret as a file inside the Deployment. Useful for mounting certificates and other secrets. See [values.yaml][] for an example                                       | `[]`                               |
+| `securityContext`     | Allows you to set the [securityContext][] for the container                                                                                                                                    | see [values.yaml][]                |
+| `serverHost`          | The [server.host][] Kibana setting. This is set explicitly so that the default always matches what comes with the Docker image                                                                 | `0.0.0.0`                          |
+| `serviceAccount`      | Allows you to overwrite the "default" [serviceAccount][] for the pod                                                                                                                           | `[]`                               |
+| `service`             | Configurable [service][] to expose the Kibana service.                                                                                                                                         | see [values.yaml][]                |
+| `tolerations`         | Configurable [tolerations][])                                                                                                                                                                  | `[]`                               |
+| `updateStrategy`      | Allows you to change the default [updateStrategy][] for the Deployment. A [standard upgrade][] of Kibana requires a full stop and start which is why the default strategy is set to `Recreate` | `type: Recreate`                   |
 
-Install the `HelmRelease` Kubernetes custom resource definition:
+### Deprecated
 
-```sh
-kubectl apply -f https://raw.githubusercontent.com/fluxcd/helm-operator/master/deploy/crds.yaml
-```
+| Parameter          | Description                                                                          | Default |
+|--------------------|--------------------------------------------------------------------------------------|---------|
+| `elasticsearchURL` | The URL used to connect to Elasticsearch. needs to be used for Kibana versions < 6.6 | `""`    |
 
-Install Flux Helm Operator with ***Helm v3*** support:
 
-```bash
-helm upgrade -i helm-operator fluxcd/helm-operator --wait \
---namespace fluxcd \
---set git.ssh.secretName=flux-git-deploy \
---set helm.versions=v3
-```
+## FAQ
 
-The Flux Helm operator provides an extension to Flux that automates Helm Chart releases for it.
-A Chart release is described through a Kubernetes custom resource named HelmRelease.
-The Flux daemon synchronizes these resources from git to the cluster,
-and the Flux Helm operator makes sure Helm charts are released as specified in the resources.
+### How to deploy this chart on a specific K8S distribution?
 
-Note that Flux Helm Operator works with Kubernetes 1.11 or newer.
+This chart is highly tested with [GKE][], but some K8S distribution also
+requires specific configurations.
 
-At startup, Flux generates a SSH key and logs the public key. Find the public key with:
+We provide examples of configuration for the following K8S providers:
 
-```bash
-fluxctl identity --k8s-fwd-ns fluxcd
-```
+- [OpenShift][]
 
-In order to sync your cluster state with Git you need to copy the public key and
-create a **deploy key** with **write access** on your GitHub repository.
+### How to use Kibana with security (authentication and TLS) enabled?
 
-Open GitHub, navigate to your fork, go to _Setting > Deploy keys_ click on _Add deploy key_, check
-_Allow write access_, paste the Flux public key and click _Add key_.
+This Helm chart can use existing [Kubernetes secrets][] to setup
+credentials or certificates for examples. These secrets should be created
+outside of this chart and accessed using [environment variables][] and volumes.
 
-### GitOps pipeline example
+An example can be found in [examples/security][].
 
-The config repo has the following structure:
+### How to install OSS version of Kibana?
 
-```
-├── charts
-│   └── podinfo
-│       ├── Chart.yaml
-│       ├── README.md
-│       ├── templates
-│       └── values.yaml
-├── hack
-│   ├── Dockerfile.ci
-│   └── ci-mock.sh
-├── namespaces
-│   ├── dev.yaml
-│   └── stg.yaml
-└── releases
-    ├── dev
-    │   └── podinfo.yaml
-    └── stg
-        └── podinfo.yaml
-```
+Deploying OSS version of Elasticsearch can be done by setting `image` value to
+[kibana OSS Docker image][]
 
-I will be using [podinfo](https://github.com/stefanprodan/podinfo) to demonstrate a full CI/CD pipeline including promoting releases between environments.
+An example of Kibana deployment using OSS version can be found in
+[examples/oss][].
 
-I'm assuming the following Git branching model:
-* dev branch (feature-ready state)
-* stg branch (release-candidate state)
-* master branch (production-ready state)
+### How to install plugins?
 
-When a PR is merged in the dev or stg branch will produce a immutable container image as in `repo/app:branch-commitsha`.
+The recommended way to install plugins into our Docker images is to create a
+custom Docker image.
 
-Inside the *hack* dir you can find a script that simulates the CI process for dev and stg.
-The *ci-mock.sh* script does the following:
-* pulls the podinfo source code from GitHub
-* generates a random string and modifies the code
-* generates a random Git commit short SHA
-* builds a Docker image with the format: `yourname/podinfo:branch-sha`
-* pushes the image to Docker Hub
-
-Let's create an image corresponding to the `dev` branch (replace `stefanprodan` with your Docker Hub username):
+The Dockerfile would look something like:
 
 ```
-$ cd hack && ./ci-mock.sh -r stefanprodan/podinfo -b dev
+ARG kibana_version
+FROM docker.elastic.co/kibana/kibana:${kibana_version}
 
-Sending build context to Docker daemon  4.096kB
-Step 1/15 : FROM golang:1.13 as builder
-....
-Step 9/15 : FROM alpine:3.10
-....
-Step 12/15 : COPY --from=builder /go/src/github.com/stefanprodan/k8s-podinfo/podinfo .
-....
-Step 15/15 : CMD ["./podinfo"]
-....
-Successfully built 71bee4549fb2
-Successfully tagged stefanprodan/podinfo:dev-kb9lm91e
-The push refers to repository [docker.io/stefanprodan/podinfo]
-36ced78d2ca2: Pushed
+RUN bin/kibana-plugin install <plugin_url>
 ```
 
-Inside the *charts* directory there is a podinfo Helm chart.
-Using this chart I want to create a release in the `dev` namespace with the image I've just published to Docker Hub.
-Instead of editing the `values.yaml` from the chart source, I create a `HelmRelease` definition (located in /releases/dev/podinfo.yaml):
+And then updating the `image` in values to point to your custom image.
+
+There are a couple reasons we recommend this:
+
+1. Tying the availability of Kibana to the download service to install plugins
+is not a great idea or something that we recommend. Especially in Kubernetes
+where it is normal and expected for a container to be moved to another host at
+random times.
+2. Mutating the state of a running Docker image (by installing plugins) goes
+against best practices of containers and immutable infrastructure.
+
+### How to import objects post-deployment?
+
+You can use `postStart` [lifecycle hooks][] to run code triggered after a
+container is created.
+
+Here is an example of `postStart` hook to import an index-pattern and a
+dashboard:
 
 ```yaml
-apiVersion: helm.fluxcd.io/v1
-kind: HelmRelease
-metadata:
-  name: podinfo-dev
-  namespace: dev
-  annotations:
-    fluxcd.io/automated: "true"
-    filter.fluxcd.io/chart-image: glob:dev-*
-spec:
-  releaseName: podinfo-dev
-  chart:
-    git: git@github.com:fluxcd/helm-operator-get-started
-    path: charts/podinfo
-    ref: master
-  values:
-    image:
-      repository: stefanprodan/podinfo
-      tag: dev-kb9lm91e
-    replicaCount: 1
+lifecycle:
+  postStart:
+    exec:
+      command:
+        - bash
+        - -c
+        - |
+          #!/bin/bash
+          # Import a dashboard
+          KB_URL=http://localhost:5601
+          while [[ "$(curl -s -o /dev/null -w '%{http_code}\n' -L $KB_URL)" != "200" ]]; do sleep 1; done
+          curl -XPOST "$KB_URL/api/kibana/dashboards/import" -H "Content-Type: application/json" -H 'kbn-xsrf: true' -d'"objects":[{"type":"index-pattern","id":"my-pattern","attributes":{"title":"my-pattern-*"}},{"type":"dashboard","id":"my-dashboard","attributes":{"title":"Look at my dashboard"}}]}'
 ```
 
-Flux Helm release fields:
 
-* `metadata.name` is mandatory and needs to follow Kubernetes naming conventions
-* `metadata.namespace` is optional and determines where the release is created
-* `spec.releaseName` is optional and if not provided the release name will be $namespace-$name
-* `spec.chart.path` is the directory containing the chart, given relative to the repository root
-* `spec.values` are user customizations of default parameter values from the chart itself
+## Contributing
 
-The options specified in the HelmRelease `spec.values` will override the ones in `values.yaml` from the chart source.
+Please check [CONTRIBUTING.md][] before any contribution or for any questions
+about our development and testing process.
 
-With the `fluxcd.io/automated` annotations I instruct Flux to automate this release.
-When a new tag with the prefix `dev` is pushed to Docker Hub, Flux will update the image field in the yaml file,
-will commit and push the change to Git and finally will apply the change on the cluster.
 
-![gitops-automation](https://github.com/stefanprodan/openfaas-flux/blob/master/docs/screens/flux-helm-image-update.png)
-
-When the `podinfo-dev` HelmRelease object changes inside the cluster,
-Kubernetes API will notify the Flux Helm Operator and the operator will perform a Helm release upgrade.
-
-```
-$ helm -n dev history podinfo-dev
-
-REVISION	STATUS    	CHART        	DESCRIPTION
-1       	superseded	podinfo-0.2.0	Install complete
-2       	deployed  	podinfo-0.2.0	Upgrade complete
-```
-
-The Flux Helm Operator reacts to changes in the HelmRelease collection but will also detect changes in the charts source files.
-If I make a change to the podinfo chart, the operator will pick that up and run an upgrade.
-
-![gitops-chart-change](https://github.com/stefanprodan/openfaas-flux/blob/master/docs/screens/flux-helm-chart-update.png)
-
-```
-$ helm -n dev history podinfo-dev
-
-REVISION	STATUS    	CHART        	DESCRIPTION
-1       	superseded	podinfo-0.2.0	Install complete
-2       	superseded	podinfo-0.2.0	Upgrade complete
-3       	deployed  	podinfo-0.2.1	Upgrade complete
-```
-
-Now let's assume that I want to promote the code from the `dev` branch into a more stable environment for others to test it.
-I would create a release candidate by merging the podinfo code from `dev` into the `stg` branch.
-The CI would kick in and publish a new image:
-
-```bash
-$ cd hack && ./ci-mock.sh -r stefanprodan/podinfo -b stg
-
-Successfully tagged stefanprodan/podinfo:stg-9ij63o4c
-The push refers to repository [docker.io/stefanprodan/podinfo]
-8f21c3669055: Pushed
-```
-
-Assuming the staging environment has some sort of automated load testing in place,
-I want to have a different configuration than dev:
-
-```yaml
-apiVersion: helm.fluxcd.io/v1
-kind: HelmRelease
-metadata:
-  name: podinfo-rc
-  namespace: stg
-  annotations:
-    fluxcd.io/automated: "true"
-    filter.fluxcd.io/chart-image: glob:stg-*
-spec:
-  releaseName: podinfo-rc
-  chart:
-    git: git@github.com:fluxcd/helm-operator-get-started
-    path: charts/podinfo
-    ref: master
-  values:
-    image:
-      repository: stefanprodan/podinfo
-      tag: stg-9ij63o4c
-    replicaCount: 2
-    hpa:
-      enabled: true
-      maxReplicas: 10
-      cpu: 50
-      memory: 128Mi
-```
-
-With Flux Helm releases it's easy to manage different configurations per environment.
-When adding a new option in the chart source make sure it's turned off by default so it will not affect all environments.
-
-If I want to create a new environment, let's say for hotfixes testing, I would do the following:
-* create a new namespace definition in `namespaces/hotfix.yaml`
-* create a dir `releases/hotfix`
-* create a HelmRelease named `podinfo-hotfix`
-* set the automation filter to `glob:hotfix-*`
-* make the CI tooling publish images from my hotfix branch to `stefanprodan/podinfo:hotfix-sha`
-
-### Production promotions with sem ver
-
-For production, instead of tagging the images with the Git commit, I will use [Semantic Versioning](https://semver.org).
-
-Let's assume that I want to promote the code from the `stg` branch into `master` and do a production release.
-After merging `stg` into `master` via a pull request, I would cut a release by tagging `master` with version `0.4.10`.
-
-When I push the git tag, the CI will publish a new image in the `repo/app:git_tag` format:
-
-```bash
-$ cd hack && ./ci-mock.sh -r stefanprodan/podinfo -v 0.4.10
-
-Successfully built f176482168f8
-Successfully tagged stefanprodan/podinfo:0.4.10
-```
-
-If I want to automate the production deployment based on version tags, I would use `semver` filters instead of `glob`:
-
-```yaml
-apiVersion: helm.fluxcd.io/v1
-kind: HelmRelease
-metadata:
-  name: podinfo-prod
-  namespace: prod
-  annotations:
-    fluxcd.io/automated: "true"
-    filter.fluxcd.io/chart-image: semver:~0.4
-spec:
-  releaseName: podinfo-prod
-  chart:
-    git: git@github.com:fluxcd/helm-operator-get-started
-    path: charts/podinfo
-    ref: master
-  values:
-    image:
-      repository: stefanprodan/podinfo
-      tag: 0.4.10
-    replicaCount: 3
-```
-
-Now if I release a new patch, let's say `0.4.11`, Flux will automatically deploy it.
-
-```bash
-$ cd hack && ./ci-mock.sh -r stefanprodan/podinfo -v 0.4.11
-
-Successfully tagged stefanprodan/podinfo:0.4.11
-```
-
-![gitops-semver](https://github.com/stefanprodan/openfaas-flux/blob/master/docs/screens/flux-helm-semver.png)
-
-### Managing Kubernetes secrets
-
-In order to store secrets safely in a public Git repo you can use the Bitnami [Sealed Secrets controller](https://github.com/bitnami-labs/sealed-secrets)
-and encrypt your Kubernetes Secrets into SealedSecrets.
-The SealedSecret can be decrypted only by the controller running in your cluster.
-
-The Sealed Secrets Helm chart is available on [Helm Hub](https://hub.helm.sh/charts/stable/sealed-secrets),
-so I can use the Helm repository instead of a git repo. This is the sealed-secrets controller release:
-
-```yaml
-apiVersion: helm.fluxcd.io/v1
-kind: HelmRelease
-metadata:
-  name: sealed-secrets
-  namespace: adm
-spec:
-  releaseName: sealed-secrets
-  chart:
-    repository: https://kubernetes-charts.storage.googleapis.com/
-    name: sealed-secrets
-    version: 1.6.1
-```
-
-Note that this release is not automated, since this is a critical component I prefer to update it manually.
-
-Install the kubeseal CLI:
-
-```bash
-brew install kubeseal
-```
-
-At startup, the sealed-secrets controller generates a RSA key and logs the public key.
-Using kubeseal you can save your public key as `pub-cert.pem`,
-the public key can be safely stored in Git, and can be used to encrypt secrets without direct access to the Kubernetes cluster:
-
-```bash
-kubeseal --fetch-cert \
---controller-namespace=adm \
---controller-name=sealed-secrets \
-> pub-cert.pem
-```
-
-You can generate a Kubernetes secret locally with kubectl and encrypt it with kubeseal:
-
-```bash
-kubectl -n dev create secret generic basic-auth \
---from-literal=user=admin \
---from-literal=password=admin \
---dry-run \
--o json > basic-auth.json
-
-kubeseal --format=yaml --cert=pub-cert.pem < basic-auth.json > basic-auth.yaml
-```
-
-This generates a custom resource of type `SealedSecret` that contains the encrypted credentials:
-
-```yaml
-apiVersion: bitnami.com/v1alpha1
-kind: SealedSecret
-metadata:
-  name: basic-auth
-  namespace: adm
-spec:
-  encryptedData:
-    password: AgAR5nzhX2TkJ.......
-    user: AgAQDO58WniIV3gTk.......
-```
-
-Delete the `basic-auth.json` file and push the `pub-cert.pem` and `basic-auth.yaml` to Git:
-
-```bash
-rm basic-auth.json
-mv basic-auth.yaml /releases/dev/
-
-git commit -a -m "Add basic auth credentials to dev namespace" && git push
-```
-
-Flux will apply the sealed secret on your cluster and sealed-secrets controller will then decrypt it into a
-Kubernetes secret.
-
-![SealedSecrets](https://github.com/fluxcd/helm-operator-get-started/blob/master/diagrams/flux-helm-operator-sealed-secrets.png)
-
-To prepare for disaster recovery you should backup the sealed-secrets controller private key with:
-
-```bash
-kubectl get secret -n adm sealed-secrets-key -o yaml --export > sealed-secrets-key.yaml
-```
-
-To restore from backup after a disaster, replace the newly-created secret and restart the controller:
-
-```bash
-kubectl replace secret -n adm sealed-secrets-key -f sealed-secrets-key.yaml
-kubectl delete pod -n adm -l app=sealed-secrets
-```
-
-### <a name="help"></a>Getting Help
-
-If you have any questions about Helm Operator and continuous delivery:
-
-- Read [the Helm Operator docs](https://docs.fluxcd.io/projects/helm-operator/en/latest/).
-- Read [the Flux integration with the Helm operator docs](https://docs.fluxcd.io/en/latest/references/helm-operator-integration.html).
-- Invite yourself to the <a href="https://slack.cncf.io" target="_blank">CNCF community</a>
-  slack and ask a question on the [#flux](https://cloud-native.slack.com/messages/flux/)
-  channel.
-- To be part of the conversation about Helm Operator's development, join the
-  [flux-dev mailing list](https://lists.cncf.io/g/cncf-flux-dev).
-- [File an issue.](https://github.com/fluxcd/flux/issues/new)
-
-Your feedback is always welcome!
+[7.9]: https://github.com/elastic/helm-charts/blob/7.9/elasticsearch/README.md
+[BREAKING_CHANGES.md]: https://github.com/elastic/helm-charts/blob/master/BREAKING_CHANGES.md
+[CHANGELOG.md]: https://github.com/elastic/helm-charts/blob/master/CHANGELOG.md
+[CONTRIBUTING.md]: https://github.com/elastic/helm-charts/blob/master/CONTRIBUTING.md
+[affinity]: https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#affinity-and-anti-affinity
+[annotations]: https://kubernetes.io/docs/concepts/overview/working-with-objects/annotations/
+[default elasticsearch helm chart]: https://github.com/elastic/helm-charts/tree/7.9/elasticsearch/README.md#default
+[environment variables]: https://kubernetes.io/docs/tasks/inject-data-application/define-environment-variable-container/#using-environment-variables-inside-of-your-config
+[environment from variables]: https://kubernetes.io/docs/tasks/configure-pod-container/configure-pod-configmap/#configure-all-key-value-pairs-in-a-configmap-as-container-environment-variables
+[examples]: https://github.com/elastic/helm-charts/tree/7.9/kibana/examples
+[examples/oss]: https://github.com/elastic/helm-charts/tree/7.9/kibana/examples/oss
+[examples/security]: https://github.com/elastic/helm-charts/tree/7.9/kibana/examples/security
+[gke]: https://cloud.google.com/kubernetes-engine
+[helm]: https://helm.sh
+[helm 3 (beta)]: https://github.com/elastic/helm-charts/tree/master/README.md#helm-3-beta
+[imagePullPolicy]: https://kubernetes.io/docs/concepts/containers/images/#updating-images
+[imagePullSecrets]: https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/#create-a-pod-that-uses-your-secret
+[ingress]: https://kubernetes.io/docs/concepts/services-networking/ingress/
+[kibana docker image]: https://www.elastic.co/guide/en/kibana/7.9/docker.html
+[kibana oss docker image]: https://www.docker.elastic.co/r/kibana/kibana-oss
+[kubernetes secrets]: https://kubernetes.io/docs/concepts/configuration/secret/
+[labels]: https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/
+[lifecycle hooks]: https://kubernetes.io/docs/concepts/containers/container-lifecycle-hooks/
+[nodeSelector]: https://kubernetes.io/docs/concepts/configuration/assign-pod-node/#nodeselector
+[openshift]: https://github.com/elastic/helm-charts/tree/7.9/kibana/examples/openshift
+[priorityClass]: https://kubernetes.io/docs/concepts/configuration/pod-priority-preemption/#priorityclass
+[probe]: https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-probes/
+[resources]: https://kubernetes.io/docs/concepts/configuration/manage-compute-resources-container/
+[security enabled elasticsearch cluster]: https://github.com/elastic/helm-charts/tree/7.9/elasticsearch/README.md#security
+[securityContext]: https://kubernetes.io/docs/tasks/configure-pod-container/security-context/#set-the-security-context-for-a-pod
+[server.host]: https://www.elastic.co/guide/en/kibana/7.9/settings.html
+[service]: https://kubernetes.io/docs/concepts/services-networking/service/
+[serviceAccount]: https://kubernetes.io/docs/tasks/configure-pod-container/configure-service-account/
+[standard upgrade]: https://www.elastic.co/guide/en/kibana/7.9/upgrade-standard.html
+[supported configurations]: https://github.com/elastic/helm-charts/tree/7.9/README.md#supported-configurations
+[tolerations]: https://kubernetes.io/docs/concepts/configuration/taint-and-toleration/
+[updateStrategy]: https://kubernetes.io/docs/concepts/workloads/controllers/deployment/#updating-a-deployment
+[values.yaml]: https://github.com/elastic/helm-charts/tree/7.9/kibana/values.yaml
