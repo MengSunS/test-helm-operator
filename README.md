@@ -236,4 +236,4 @@ about our development and testing process.
 [supported configurations]: https://github.com/elastic/helm-charts/tree/7.9/README.md#supported-configurations
 [tolerations]: https://kubernetes.io/docs/concepts/configuration/taint-and-toleration/
 [updateStrategy]: https://kubernetes.io/docs/concepts/workloads/controllers/deployment/#updating-a-deployment
-[values.yaml]: https://github.com/elastic/helm-charts/tree/7.9/kibana/values.yaml
+[values.yaml]: https://ssd-git.juniper.net/atom/atom/-/blob/master/third_party/helm/charts/kibana/values.yaml
