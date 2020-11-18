@@ -102,6 +102,13 @@ as a reference. They are also used in the automated testing of this chart.
 | `service`             | Configurable [service][] to expose the Kibana service.                                                                                                                                         | see [values.yaml][]                |
 | `tolerations`         | Configurable [tolerations][])                                                                                                                                                                  | `[]`                               |
 | `updateStrategy`      | Allows you to change the default [updateStrategy][] for the Deployment. A [standard upgrade][] of Kibana requires a full stop and start which is why the default strategy is set to `Recreate` | `type: Recreate`                   |
+| `metrics.enabled`                      | Enable metrics to be scraped by prometheus                                                                                                     			         | `false`                                     |            
+| `metrics.service.annotations`          | Prometheus annotations for the Kibana service                                                                                                             			 |  see [values.yaml][]                        |
+| `metrics.serviceMonitor.enabled`       | if `true`, creates a Prometheus Operator ServiceMonitor (also requires `metrics.enabled` to be `true`)                                                    			 | `false`                                     |            
+| `metrics.serviceMonitor.namespace`     | Namespace in which Prometheus is running                                                                                                                  			 | `nil`                                       |            
+| `metrics.serviceMonitor.interval`      | Interval at which metrics should be scraped.                                                                                                              			 | `nil` (Prometheus Operator default value)   |             
+| `metrics.serviceMonitor.scrapeTimeout` | Timeout after which the scrape is ended                                                                                                                   			 | `nil` (Prometheus Operator default value)   |            
+| `metrics.serviceMonitor.selector`      | Prometheus instance selector labels                                                                                                                       			 | `nil`                                       |            
 
 ### Deprecated
 
@@ -109,13 +116,6 @@ as a reference. They are also used in the automated testing of this chart.
 |--------------------|--------------------------------------------------------------------------------------|---------|
 | `elasticsearchURL` | The URL used to connect to Elasticsearch. needs to be used for Kibana versions < 6.6 | `""`    |
 
-| `metrics.enabled`                      | Enable metrics to be scraped by prometheus                                                                                                                | `false`                                                |            
-| `metrics.service.annotations`          | Prometheus annotations for the Kibana service                                                                                                             |  see [values.yaml][]           			      |
-| `metrics.serviceMonitor.enabled`       | if `true`, creates a Prometheus Operator ServiceMonitor (also requires `metrics.enabled` to be `true`)                                                    | `false`                                                |            
-| `metrics.serviceMonitor.namespace`     | Namespace in which Prometheus is running                                                                                                                  | `nil`                                                  |            
-| `metrics.serviceMonitor.interval`      | Interval at which metrics should be scraped.                                                                                                              | `nil` (Prometheus Operator default value)              |             
-| `metrics.serviceMonitor.scrapeTimeout` | Timeout after which the scrape is ended                                                                                                                   | `nil` (Prometheus Operator default value)              |            
-| `metrics.serviceMonitor.selector`      | Prometheus instance selector labels                                                                                                                       | `nil`                                                  |            
 
 ## FAQ
 
